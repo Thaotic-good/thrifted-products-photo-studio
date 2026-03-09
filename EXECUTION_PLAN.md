@@ -174,7 +174,7 @@ thrifted-products-photo-studio/
 │   │   ├── supabase/
 │   │   │   ├── client.ts           # Browser client
 │   │   │   ├── server.ts           # Server client
-│   │   │   └── middleware.ts       # Auth middleware
+│   │   │   └── proxy.ts            # Auth proxy
 │   │   ├── replicate.ts            # Replicate API wrapper
 │   │   └── logging.ts              # Logging utility
 │   │

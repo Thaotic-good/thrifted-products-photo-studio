@@ -27,7 +27,7 @@ This is the **detailed backend implementation guide** for the AI Product Photogr
 2. [Supabase Configuration](#2-supabase-configuration)
 3. [Database Schema](#3-database-schema)
 4. [Storage Structure](#4-storage-structure)
-5. [Authentication Middleware](#5-authentication-middleware)
+5. [Authentication Proxy](#5-authentication-proxy)
 6. [Replicate API Integration](#6-replicate-api-integration)
 7. [API Endpoint: Upload](#7-api-endpoint-upload)
 8. [API Endpoint: Process Batch](#8-api-endpoint-process-batch)
@@ -131,7 +131,7 @@ app/
 │   ├── supabase/
 │   │   ├── client.ts
 │   │   ├── server.ts
-│   │   └── middleware.ts
+│   │   └── proxy.ts
 │   ├── replicate.ts
 │   ├── logging.ts
 │   └── validation.ts
@@ -519,7 +519,7 @@ export async function downloadFromUrl(url: string): Promise<Buffer | null> {
 
 ---
 
-## 5. Authentication Middleware
+## 5. Authentication Proxy
 
 ### 5.1 Root Middleware
 
