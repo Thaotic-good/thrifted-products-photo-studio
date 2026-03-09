@@ -77,17 +77,17 @@ This is the **master execution plan** that provides a high-level overview of the
 ┌────────────────────────┐    ┌──────────────────────────────┐
 │   SUPABASE             │    │   REPLICATE API              │
 │                        │    │                              │
-│  ┌──────────────────┐  │    │  ┌────────────────────────┐ │
-│  │  PostgreSQL DB   │  │    │  │  AI Models:            │ │
-│  │  (Schema)        │  │    │  │  - rembg/remove-bg     │ │
-│  └──────────────────┘  │    │  │  - stable-diffusion-v2 │ │
-│                        │    │  │  - fooocus-inpaint     │ │
-│  ┌──────────────────┐  │    │  └────────────────────────┘ │
-│  │  Storage         │  │    │                              │
-│  │  - uploads/      │  │    │  Webhook Callback:          │
-│  │  - results/      │  │    │  POST /api/webhook/replicate│
-│  │  - models/       │  │    └──────────────────────────────┘
-│  └──────────────────┘  │
+│  ┌──────────────────┐  │    │  ┌────────────────────────────────┐ │
+│  │  PostgreSQL DB   │  │    │  │  AI Models (see replicate.ts): │ │
+│  │  (Schema)        │  │    │  │  - BACKGROUND_REMOVAL_MODEL    │ │
+│  └──────────────────┘  │    │  │  - BACKGROUND_GENERATION_MODEL │ │
+│                        │    │  │  - LIGHTING_UNIFICATION_MODEL  │ │
+│  ┌──────────────────┐  │    │  │  - VIRTUAL_TRYON_MODEL         │ │
+│  │  Storage         │  │    │  └────────────────────────────────┘ │
+│  │  - uploads/      │  │    │                              │
+│  │  - results/      │  │    │  Webhook Callback:          │
+│  │  - models/       │  │    │  POST /api/webhook/replicate│
+│  └──────────────────┘  │    └──────────────────────────────┘
 │                        │
 │  ┌──────────────────┐  │
 │  │  Realtime        │  │◄─── Subscribes to DB changes
@@ -119,8 +119,9 @@ This is the **master execution plan** that provides a high-level overview of the
 **Purpose:** Transform raw product photos into professional images with curated backgrounds.
 
 **Steps:**
-1. **Background Removal** → Transparent PNG (Model: `cjwbw/rembg`)
-2. **Professional Background** → Final image with studio-quality background (Model: `stable-diffusion-v2-inpainting`)
+1. **Background Removal** → Transparent PNG (Model: `BACKGROUND_REMOVAL_MODEL` — see `app/lib/replicate.ts`)
+2. **Professional Background** → Final image with studio-quality background (Model: `BACKGROUND_GENERATION_MODEL` — see `app/lib/replicate.ts`)
+3. **Lighting Unification** → Harmonise lighting between composited foreground and new background (Model: `LIGHTING_UNIFICATION_MODEL` — see `app/lib/replicate.ts`)
 
 **Use Cases:** Footwear, electronics, accessories, furniture
 
@@ -135,7 +136,7 @@ This is the **master execution plan** that provides a high-level overview of the
 **Steps:**
 1. **Garment Detection** → Extract clean garment image
 2. **Model Selection** → Choose from pre-loaded models or user uploads
-3. **Virtual Try-On** → AI overlays garment onto model (Model: `zarquon/fooocus-inpaint`)
+3. **Virtual Try-On** → AI overlays garment onto model (Model: `VIRTUAL_TRYON_MODEL` — see `app/lib/replicate.ts`)
 
 **Use Cases:** T-shirts, dresses, jackets, apparel
 
@@ -394,11 +395,16 @@ thrifted-products-photo-studio/
 
 **Models Used:**
 
-| Pipeline | Model | Cost/Run | Avg Time |
-|----------|-------|----------|----------|
-| Objects (BG Removal) | `cjwbw/rembg` | $0.001 | 2-5s |
-| Objects (BG Generation) | `stability-ai/stable-diffusion-inpainting` | $0.05 | 10-20s |
-| Clothing (Try-On) | `fofr/try-on` | $0.10 | 15-30s |
+> All model identifiers are defined as named constants in `app/lib/replicate.ts`.
+> The table below is a summary — update that file (not this table) when swapping models.
+> **(Note: later iteration may include resolution enhancement model)**
+> 
+| Pipeline | Constant | Replicate Model              | Cost/Run | Avg Time |
+|----------|----------|------------------------------|---|-----|
+| Objects – BG Removal    | `BACKGROUND_REMOVAL_MODEL`    | `bria/remove-background`     | ~$0.018 | |
+| Objects – BG Generation | `BACKGROUND_GENERATION_MODEL` | `bria/generate-background`   | ~$0.4 |  |
+| Objects – Lighting      | `LIGHTING_UNIFICATION_MODEL`  | `zsxkib/ic-light-background` | ~$0.033 | ~34 s |
+| Clothing – Try-On       | `VIRTUAL_TRYON_MODEL`         | `DCI-VTON` ⚠ self-hosted     |   |  |
 
 **Integration:**
 - Async predictions with webhooks

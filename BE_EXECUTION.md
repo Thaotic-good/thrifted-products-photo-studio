@@ -47,9 +47,9 @@ This is the **detailed backend implementation guide** for the AI Product Photogr
 
 ```bash
 # Create new Next.js project
-npx create-next-app@16 ai-photo-augmentation --typescript --tailwind --app
+npx create-next-app@16 thrifted-products-photo-studio --typescript --tailwind --app
 
-cd ai-photo-augmentation
+cd thrifted-products-photo-studio
 ```
 
 ### 1.2 Install Dependencies
@@ -381,14 +381,23 @@ CREATE POLICY "Users can delete own models"
 
 ### 3.3 Seed Data (Development)
 
+> **Note:** The seed SQL below must stay in sync with the `MODELS` constants in
+> `app/lib/replicate.ts` (Section 6.1). Current verified identifiers:
+> - BG removal → `bria/remove-background`
+> - BG generation → `bria/generate-background`
+> - Lighting unification → `zsxkib/ic-light-background`
+> - Virtual try-on → `DCI-VTON` ⚠ self-hosted (not a standard Replicate model)
+
 Create `supabase/seed.sql`:
 
 ```sql
 -- Insert default processing models
+-- Keep in sync with MODELS constants in app/lib/replicate.ts
 INSERT INTO processing_models (model_name, pipeline_type, replicate_owner, replicate_model_name, cost_per_run, avg_run_time_seconds) VALUES
-('background_removal', 'background_removal', 'cjwbw', 'rembg', 0.001, 3),
-('stable_diffusion_inpaint', 'background_generation', 'stability-ai', 'stable-diffusion-inpainting', 0.05, 15),
-('virtual_tryon', 'virtual_tryon', 'fofr', 'try-on', 0.10, 25);
+('background_removal',     'background_removal',    'bria',    'remove-background',   0.018,  NULL),
+('background_generation',  'background_generation', 'bria',    'generate-background', 0.4,    NULL),
+('lighting_unification',   'lighting_unification',  'zsxkib',  'ic-light-background', 0.033,  34),
+('virtual_tryon',          'virtual_tryon',         NULL,      'DCI-VTON',            NULL,   NULL);
 ```
 
 ---
@@ -644,6 +653,13 @@ export async function requireAuth(request: NextRequest) {
 
 ## 6. Replicate API Integration
 
+> **Model identifier ownership:** All Replicate model owner slugs, model name
+> slugs, version SHAs, cost estimates, and timing estimates live in the
+> `REPLICATE_MODEL_CONFIG` constants block inside `app/lib/replicate.ts`
+> (Section 6.1 below). This is the **single source of truth** — do not
+> hard-code model identifiers anywhere else. When model research is complete,
+> update only that block; everything else picks up the change automatically.
+
 ### 6.1 Replicate Client Setup
 
 Create `app/lib/replicate.ts`:
@@ -663,21 +679,86 @@ export interface ReplicateModel {
   version?: string;
 }
 
-// Model configurations
-export const MODELS = {
-  background_removal: {
-    owner: "cjwbw",
-    name: "rembg",
-  },
-  background_generation: {
-    owner: "stability-ai",
-    name: "stable-diffusion-inpainting",
-  },
-  virtual_tryon: {
-    owner: "fofr",
-    name: "try-on",
-  },
+// ---------------------------------------------------------------------------
+// REPLICATE MODEL REGISTRY
+// All model identifiers are centralised here so they can be swapped in one
+// place when a better model is found or a version pin needs updating.
+//
+// Format for each entry:
+//   owner   – Replicate account/org that owns the model
+//   name    – Model slug on Replicate
+//   version – Exact version SHA (pin this in production for reproducibility).
+//             Set to undefined to always use the latest deployment.
+//   costPerRun       – Approximate USD cost per prediction (informational)
+//   avgRunTimeSecs   – Approximate wall-clock seconds (informational)
+//
+// ---------------------------------------------------------------------------
+
+export interface ReplicateModelConfig extends ReplicateModel {
+  /** Approximate USD cost per prediction */
+  costPerRun: number;
+  /** Approximate wall-clock seconds */
+  avgRunTimeSecs: number;
+}
+
+// Pipeline A – Step 1: Background removal → transparent PNG
+// Model: bria/remove-background
+//   BRIA's background removal model.
+//   ~$0.018/run | Avg time TBD
+const BACKGROUND_REMOVAL_MODEL: ReplicateModelConfig = {
+  owner: "bria",
+  name: "remove-background",
+  version: undefined,            // pin a version SHA in production for reproducibility
+  costPerRun: 0.018,
+  avgRunTimeSecs: 0,             // TBD — update once benchmarked
 };
+
+// Pipeline A – Step 2: Studio-quality background generation
+// Model: bria/generate-background
+//   BRIA's background generation model.
+//   Accepts a transparent-background PNG + text prompt, generates a new background.
+//   ~$0.4/run | Avg time TBD
+const BACKGROUND_GENERATION_MODEL: ReplicateModelConfig = {
+  owner: "bria",
+  name: "generate-background",
+  version: undefined,
+  costPerRun: 0.4,
+  avgRunTimeSecs: 0,             // TBD — update once benchmarked
+};
+
+// Pipeline A – Step 3: Lighting unification / harmonisation
+// Model: zsxkib/ic-light-background  (IC-Light – Imposing Consistent Light)
+//   Relights the composited foreground to match the new background's illumination.
+//   Key inputs: foreground image, background reference image, text prompt
+//   ~$0.033/run (~30 runs/$1) | ~34 s | Nvidia L40S
+const LIGHTING_UNIFICATION_MODEL: ReplicateModelConfig = {
+  owner: "zsxkib",
+  name: "ic-light-background",
+  version: undefined,
+  costPerRun: 0.033,
+  avgRunTimeSecs: 34,
+};
+
+// Pipeline B: Virtual try-on – garment overlay onto human model photo
+// Model: DCI-VTON  ⚠ self-hosted (not a standard Replicate model)
+//   Self-hosted virtual try-on model — requires separate deployment.
+//   For hosted alternatives, evaluate FASHN API (fashn.ai).
+//   Key inputs: human_img, garm_img (exact API TBD per deployment)
+const VIRTUAL_TRYON_MODEL: ReplicateModelConfig = {
+  owner: "",                     // self-hosted — no Replicate owner
+  name: "DCI-VTON",
+  version: undefined,
+  costPerRun: 0,                 // TBD — depends on hosting setup
+  avgRunTimeSecs: 0,             // TBD — update once benchmarked
+};
+
+// Single export map consumed by pipeline functions below
+export const MODELS = {
+  background_removal: BACKGROUND_REMOVAL_MODEL,
+  background_generation: BACKGROUND_GENERATION_MODEL,
+  lighting_unification: LIGHTING_UNIFICATION_MODEL,
+  virtual_tryon: VIRTUAL_TRYON_MODEL,
+} as const;
 
 export async function createPrediction(
   model: ReplicateModel,
