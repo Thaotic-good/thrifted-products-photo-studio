@@ -285,7 +285,7 @@ CREATE TABLE processing_models (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
 
   model_name TEXT NOT NULL UNIQUE,
-  pipeline_type TEXT NOT NULL CHECK (pipeline_type IN ('background_removal', 'background_generation', 'virtual_tryon')),
+  pipeline_type TEXT NOT NULL CHECK (pipeline_type IN ('background_removal', 'background_generation', 'lighting_unification', 'virtual_tryon')),
 
   -- Replicate reference
   replicate_owner TEXT NOT NULL,
